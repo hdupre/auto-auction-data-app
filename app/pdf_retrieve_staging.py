@@ -33,7 +33,7 @@ ST_PATTERN = r"(\b[A-Z]{2}\b)"
 
 config = configparser.ConfigParser()
 script_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(script_dir, 'application.properties')
+config_path = os.path.join(script_dir, '../application.properties')
 config.read(config_path)
 
 host = config.get('postgres', 'host')
@@ -46,7 +46,7 @@ auto_db = config.get('postgres', 'auto_db')
 current_date = datetime.now().strftime('%Y-%m-%d')
 
 # Set the log directory
-log_dir = os.path.join(script_dir, 'logs')
+log_dir = os.path.join(script_dir, '../logs')
 
 # Create the logs directory if it doesn't exist
 if not os.path.exists(log_dir):

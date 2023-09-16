@@ -12,7 +12,7 @@ from collections import defaultdict
 current_date = datetime.now().strftime('%Y-%m-%d')
 
 # Set the log directory (assuming you've already defined it)
-log_dir = './logs'  # example log directory
+log_dir = '../logs'  # example log directory
 
 # Create the filename using the current date
 log_filename = os.path.join(log_dir, f'decode_vin_{current_date}.log')
