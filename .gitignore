@@ -170,3 +170,6 @@ cython_debug/
 .idea/vcs.xml
 .DS_Store
 /archive/
+.idea/auto-auction-data-apps.iml
+.idea/inspectionProfiles/Project_Default.xml
+.idea/workspace.xml
