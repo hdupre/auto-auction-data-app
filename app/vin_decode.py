@@ -25,7 +25,9 @@ logging.info("Script started")
 
 def load_postgres_configurations():
     config = configparser.ConfigParser()
-    config.read('application.properties')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, '../application.properties')
+    config.read(config_path)
 
     db_config = {
         'host': config.get('postgres', 'host'),
@@ -38,7 +40,9 @@ def load_postgres_configurations():
 
 def load_mssql_configurations():
     config = configparser.ConfigParser()
-    config.read('application.properties')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, '../application.properties')
+    config.read(config_path)
 
     db_config = {
         'host': config.get('mssql', 'host'),
