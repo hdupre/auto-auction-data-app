@@ -40,7 +40,7 @@ host = config.get('postgres', 'host')
 port = config.get('postgres', 'port')
 user = config.get('postgres', 'user')
 passwd = config.get('postgres', 'passwd')
-auto_db = config.get('postgres', 'auto_db')
+auto_db = config.get('postgres', 'db')
 
 # Get the current date in the desired format
 current_date = datetime.now().strftime('%Y-%m-%d')
