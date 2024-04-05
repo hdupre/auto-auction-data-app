@@ -14,7 +14,7 @@ import numpy as np
 os.environ['DYLD_LIBRARY_PATH'] = '/Users/harris/Library/Java/JavaVirtualMachines/corretto-17.0.8/Contents/Home/lib'
 
 local_pdfs = [
-              "/Users/harris/Projects/auto_auction/auto-auction-data-apps/pdf/auction-101323-bronx.pdf"
+              "/Users/harris/Projects/auto_auction/auto-auction-data-apps/pdf/auction-041624-bronx.pdf"
               ]
 
 config = configparser.ConfigParser()
@@ -78,10 +78,8 @@ def fetch_loaded_urls_from_db(connection_string):
             results = cursor.fetchall()
             return [i[0] for i in results]
 
-
 def get_filtered_urls(all_urls, loaded_urls):
     return [url for url in all_urls if url not in loaded_urls]
-
 
 def get_auction_url_list():
     html_content = fetch_html_content(URL)
@@ -92,7 +90,6 @@ def get_auction_url_list():
 
     logging.info("Returning URL List...")
     return filtered_urls
-
 
 def download_pdf(url, directory="../pdf"):
     try:
@@ -170,28 +167,27 @@ def manual_extraction(pdf):
                 'VEHICLE ID': vin,
                 'LIENHOLDER': lienholder
             })
-
     return pd.DataFrame(processed_rows, columns=COLUMN_NAMES)
+
 def process_pdf(pdf):
     full_path = download_pdf(pdf)
     try:
         car_list = tabula.read_pdf(pdf, pages='all', output_format="dataframe")
         df = car_list[0]
-    except:
-        logging.warning("Tabula failed to read the PDF. Using manual extraction...")
+    except Exception as e:
+        logging.warning("Tabula failed to read the PDF. Using manual extraction... Exception: " + str(e))
         df = manual_extraction(full_path)
     else:
+        # This check happens only if Tabula successfully reads the PDF.
         if df.columns.values.tolist() != COLUMN_NAMES:
             logging.error(pdf + " unexpected column headers, extracting manually...")
-        df = manual_extraction(full_path)
+            df = manual_extraction(full_path)  # Ensure you use `full_path` here as well if that's what `manual_extraction` expects.
     return df
-
 
 def process_auction_date(pdf):
     date_match = re.findall(r'(\d{6,8})', pdf)[0]
     date_format = "%m%d%y" if len(date_match) == 6 else "%m%d%Y"
     return pd.to_datetime(date_match, format=date_format)
-
 
 def process_borough(pdf):
     for borough in BOROUGHS:
@@ -199,33 +195,20 @@ def process_borough(pdf):
             return borough
     return None
 
-
 def process_location_order(pdf):
     pattern = r"(?<=([-_]))\d(?=([-_]))"
     match_order = re.search(pattern, pdf)
     return int(match_order.group()) if match_order else 1
 
-def adjust_lot_numbers(df):
+def check_lot_numbers(df):
     """
-    Adjusts the lot numbers in the DataFrame if they reset after 100, considering that lot numbers start at 1.
-    If the adjustment condition is not met, log the row, remove it from the DataFrame, and move on.
+    Checks for mismatched lot numbers and logs an error if found.
+    Does not modify the DataFrame or return anything.
     """
-    rows_to_drop = []  # Initialize a list to keep track of row indices to drop
     for i, row in df.iterrows():
         lot_number = int(row['#']) if pd.notnull(row['#']) else -1
-        # Adjust the comparison to account for the off-by-one difference between lot numbers and row indices
-        if lot_number != (i + 1):
-            if not (lot_number == (i + 1) % 100 or (lot_number == 0 and (i + 1) % 100 == 100)):
-                # If the condition is not met, log the error and mark the row for removal
-                logging.error(f"Lot number mismatch or invalid condition for row: {row.to_dict()}")
-                rows_to_drop.append(i)  # Add the index of the row to be dropped
-                continue  # Skip further processing for this row
-            else:
-                # If the condition is met, adjust the lot number correctly
-                df.at[i, 'lot_number'] = i + 1
-    # Drop the rows that did not meet the condition
-    df.drop(rows_to_drop, inplace=True)
-    return df
+        if lot_number != (i + 1):  # Example condition, adjust based on actual logic
+            logging.error(f"Lot number mismatch for row {i}: expected {(i + 1)}, found {lot_number}")
 
 def create_auction_df(url_list):
     if not url_list:
@@ -244,11 +227,12 @@ def create_auction_df(url_list):
             df['url'] = pdf
 
             df = df[df['VEHICLE ID'].notnull() & (df['VEHICLE ID'] != 'VEHICLE ID')]
-            df = adjust_lot_numbers(df)  # Adjust lot numbers here
+
             # Drop columns in df that are entirely empty or filled with NAs, if any, before concatenation
             # This step assumes you want to retain the column structure of df_combined
             columns_to_keep = df_combined.columns.intersection(df.columns)
             df_filtered = df[columns_to_keep].dropna(how='all', axis=1)
+            check_lot_numbers(df_filtered)  # Adjust lot numbers here
 
             # Concatenate while retaining the structure of df_combined
             df_combined = pd.concat([df_combined, df_filtered], ignore_index=True).reindex(columns=df_combined.columns)
@@ -272,7 +256,6 @@ def create_auction_df(url_list):
     return [df_combined, url_list_df]
 
 def load_auction_db(df_list):
-
     if len(df_list) == 0:
         logging.info("No new auctions")
         return
@@ -296,7 +279,6 @@ def load_auction_db(df_list):
         print(ex)
 
     engine.dispose()
-
 
 if __name__ == '__main__':
     if False:
