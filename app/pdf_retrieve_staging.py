@@ -200,16 +200,6 @@ def process_location_order(pdf):
     match_order = re.search(pattern, pdf)
     return int(match_order.group()) if match_order else 1
 
-def check_lot_numbers(df):
-    """
-    Checks for mismatched lot numbers and logs an error if found.
-    Does not modify the DataFrame or return anything.
-    """
-    for i, row in df.iterrows():
-        lot_number = int(row['#']) if pd.notnull(row['#']) else -1
-        if lot_number != (i + 1):  # Example condition, adjust based on actual logic
-            logging.error(f"Lot number mismatch for row {i}: expected {(i + 1)}, found {lot_number}")
-
 def create_auction_df(url_list):
     if not url_list:
         return []
@@ -232,7 +222,6 @@ def create_auction_df(url_list):
             # This step assumes you want to retain the column structure of df_combined
             columns_to_keep = df_combined.columns.intersection(df.columns)
             df_filtered = df[columns_to_keep].dropna(how='all', axis=1)
-            check_lot_numbers(df_filtered)  # Adjust lot numbers here
 
             # Concatenate while retaining the structure of df_combined
             df_combined = pd.concat([df_combined, df_filtered], ignore_index=True).reindex(columns=df_combined.columns)
