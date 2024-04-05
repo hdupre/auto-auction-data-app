@@ -11,25 +11,11 @@ import configparser
 import os
 import pdfplumber
 import numpy as np
+os.environ['DYLD_LIBRARY_PATH'] = '/Users/harris/Library/Java/JavaVirtualMachines/corretto-17.0.8/Contents/Home/lib'
 
-local_pdfs = ["/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-08102023-brooklyn.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-08142023-brooklyn.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-081623-bronx.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-082423-bronx.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-08282023-bronx.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-090623-brooklyn.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-090723-bronx.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-090923-statenisland.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-091323-bronx.pdf",
-                "/Users/harris/Projects/auto_auction/auto-auction-data-apps/python/pdf/auction-091523-bronx.pdf"
+local_pdfs = [
+              "/Users/harris/Projects/auto_auction/auto-auction-data-apps/pdf/auction-101323-bronx.pdf"
               ]
-
-# Define regex patterns
-VIN_PATTERN = r"(\b[A-HJ-NPR-Z0-9]{17}\b)"  # VIN typically has 17 characters, excluding certain characters
-DIGIT_PATTERN = r"(\b\d{1,2}\b)"
-YEAR_PATTERN = r"(\b(19[7-9][0-9]|20[0-2][0-9])\b)"  # Years between 1975 to current year (2029 in this case)
-PLATE_PATTERN = r"(\b[a-zA-Z0-9]{6,8}\b)"
-ST_PATTERN = r"(\b[A-Z]{2}\b)"
 
 config = configparser.ConfigParser()
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -64,12 +50,12 @@ logging.info("Script started")
 # Define constants
 BOROUGHS = ['bronx', 'brooklyn', 'statenisland', 'queens', 'manhattan']
 COLUMN_NAMES = ['#', 'YEAR', 'MAKE', 'PLATE#', 'ST', 'VEHICLE ID', 'LIENHOLDER']
-URL = "https://www1.nyc.gov/site/finance/vehicles/services-auctions.page"
-START_STRING = "https://www1.nyc.gov"
+URL = "https://www.nyc.gov/site/finance/vehicles/auctions.page"
+START_STRING = "https://www.nyc.gov"
 # Define regex patterns
-VIN_PATTERN = r"(\b[A-HJ-NPR-Z0-9]{17}\b)"  # VIN typically has 17 characters, excluding certain characters
+VIN_PATTERN = r"^(?:(?=.*[A-HJ-NPR-Z])(?=.*\d)[A-HJ-NPR-Z\d]{11,17}|[A-HJ-NPR-Z\d]{8}[\dX][A-HJ-NPR-Z\d]{2}\d{6})$"
 DIGIT_PATTERN = r"(\b\d{1,2}\b)"
-YEAR_PATTERN = r"\b\d{4}\b"
+YEAR_PATTERN = r"\b(19[6-9]\d|20[0-1]\d|202[0-9])\b"
 PLATE_PATTERN = r"(\b[a-zA-Z0-9]{6,8}\b)"
 ST_PATTERN = r"(\b[A-Z]{2}\b)"
 DB_CONNECTION_STRING = f'postgresql://{user}:{passwd}@{host}:{port}/{auto_db}'
@@ -80,8 +66,7 @@ def fetch_html_content(url):
 def extract_urls_from_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
     abstract = soup.find_all(class_='abstract')
-    return [a['href'] for a in abstract[0].find_all('a', href=True) if a['href'] != '#']
-
+    return [a['href'] for a in abstract[0].find_all('a', href=True) if a['href'].endswith('.pdf')]
 def append_start_string_to_urls(urls, start_string):
     return [start_string + url for url in urls]
 
@@ -108,22 +93,43 @@ def get_auction_url_list():
     logging.info("Returning URL List...")
     return filtered_urls
 
-def download_pdf(url, directory="pdf"):
-    # Create directory if not exists
-    if not os.path.exists(directory):
-        os.makedirs(directory)
 
-    # Get file name from url
-    filename = url.split("/")[-1]
+def download_pdf(url, directory="../pdf"):
+    try:
+        # Create directory if not exists
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
-    # Create full path
-    full_path = os.path.join(directory, filename)
+        # Download the file from `url`
+        response = requests.get(url, allow_redirects=True)
+        response.raise_for_status()  # Raise an HTTPError if the HTTP request returned an unsuccessful status code
 
-    # Download the file from `url` and save it
-    response = requests.get(url)
-    with open(full_path, 'wb') as out_file:
-        out_file.write(response.content)
-    logging.info(f"File saved to {full_path}")
+        # Check if the content type is PDF
+        if 'application/pdf' not in response.headers.get('content-type', ''):
+            logging.error(f"URL does not point to a PDF file: {url}")
+            return None
+
+        # Extract filename from Content-Disposition header or URL
+        content_disposition = response.headers.get('content-disposition')
+        if content_disposition:
+            filename = re.findall('filename=(.+)', content_disposition)[0]
+        else:
+            filename = url.split("/")[-1]
+
+        # Create full path
+        full_path = os.path.join(directory, filename)
+
+        # Save the PDF
+        with open(full_path, 'wb') as out_file:
+            out_file.write(response.content)
+
+        logging.info(f"File saved to {full_path}")
+        return full_path
+
+    except requests.RequestException as e:
+        logging.error(f"Error downloading the file: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
 
 def extract_text_from_pdf(pdf_path):
     with pdfplumber.open(pdf_path) as pdf:
@@ -132,47 +138,52 @@ def extract_text_from_pdf(pdf_path):
             text += page.extract_text()
     return text
 
+def manual_extraction(pdf):
+    pdf_text = extract_text_from_pdf(pdf)
+    rows = pdf_text.split('\n')
+    processed_rows = []
+    for row in rows:
+        vin_match = re.search(VIN_PATTERN, row)
+
+        # Only process rows with a VIN
+        if vin_match:
+            vin = vin_match.group()
+            potential_lienholder = row.split(vin)[1].strip() if vin in row else ""
+
+            # Check if potential_lienholder contains any alphanumeric characters
+            if re.search(r"\w", potential_lienholder):
+                lienholder = potential_lienholder
+            else:
+                lienholder = np.nan
+
+            digit_match = re.search(DIGIT_PATTERN, row)
+            year_match = re.search(YEAR_PATTERN, row)
+            plate_match = re.search(PLATE_PATTERN, row)
+            st_match = re.search(ST_PATTERN, row)
+
+            processed_rows.append({
+                '#': digit_match.group() if digit_match else np.nan,
+                'YEAR': year_match.group() if year_match else np.nan,
+                'MAKE': np.nan,  # Not extracting MAKE as it's complex
+                'PLATE#': plate_match.group() if plate_match else np.nan,
+                'ST': st_match.group() if st_match else np.nan,
+                'VEHICLE ID': vin,
+                'LIENHOLDER': lienholder
+            })
+
+    return pd.DataFrame(processed_rows, columns=COLUMN_NAMES)
 def process_pdf(pdf):
-    download_pdf(pdf)
-    car_list = tabula.read_pdf(pdf, pages='all', output_format="dataframe")
-    df = car_list[0]
-
-    if df.columns.values.tolist() != COLUMN_NAMES:
-        logging.error(pdf + " unexpected column headers, extracting manually...")
-        pdf_text = extract_text_from_pdf(pdf)
-        rows = pdf_text.split('\n')
-        processed_rows = []
-        for row in rows:
-            vin_match = re.search(VIN_PATTERN, row)
-
-            # Only process rows with a VIN
-            if vin_match:
-                vin = vin_match.group()
-                potential_lienholder = row.split(vin)[1].strip() if vin in row else ""
-
-                # Check if potential_lienholder contains any alphanumeric characters
-                if re.search(r"\w", potential_lienholder):
-                    lienholder = potential_lienholder
-                else:
-                    lienholder = np.nan
-
-                digit_match = re.search(DIGIT_PATTERN, row)
-                year_match = re.search(YEAR_PATTERN, row)
-                plate_match = re.search(PLATE_PATTERN, row)
-                st_match = re.search(ST_PATTERN, row)
-
-                processed_rows.append({
-                    '#': digit_match.group() if digit_match else np.nan,
-                    'YEAR': year_match.group() if year_match else np.nan,
-                    'MAKE': np.nan,  # Not extracting MAKE as it's complex
-                    'PLATE#': plate_match.group() if plate_match else np.nan,
-                    'ST': st_match.group() if st_match else np.nan,
-                    'VEHICLE ID': vin,
-                    'LIENHOLDER': lienholder
-                })
-
-        df = pd.DataFrame(processed_rows, columns=COLUMN_NAMES)
-
+    full_path = download_pdf(pdf)
+    try:
+        car_list = tabula.read_pdf(pdf, pages='all', output_format="dataframe")
+        df = car_list[0]
+    except:
+        logging.warning("Tabula failed to read the PDF. Using manual extraction...")
+        df = manual_extraction(full_path)
+    else:
+        if df.columns.values.tolist() != COLUMN_NAMES:
+            logging.error(pdf + " unexpected column headers, extracting manually...")
+        df = manual_extraction(full_path)
     return df
 
 
@@ -194,6 +205,27 @@ def process_location_order(pdf):
     match_order = re.search(pattern, pdf)
     return int(match_order.group()) if match_order else 1
 
+def adjust_lot_numbers(df):
+    """
+    Adjusts the lot numbers in the DataFrame if they reset after 100, considering that lot numbers start at 1.
+    If the adjustment condition is not met, log the row, remove it from the DataFrame, and move on.
+    """
+    rows_to_drop = []  # Initialize a list to keep track of row indices to drop
+    for i, row in df.iterrows():
+        lot_number = int(row['#']) if pd.notnull(row['#']) else -1
+        # Adjust the comparison to account for the off-by-one difference between lot numbers and row indices
+        if lot_number != (i + 1):
+            if not (lot_number == (i + 1) % 100 or (lot_number == 0 and (i + 1) % 100 == 100)):
+                # If the condition is not met, log the error and mark the row for removal
+                logging.error(f"Lot number mismatch or invalid condition for row: {row.to_dict()}")
+                rows_to_drop.append(i)  # Add the index of the row to be dropped
+                continue  # Skip further processing for this row
+            else:
+                # If the condition is met, adjust the lot number correctly
+                df.at[i, 'lot_number'] = i + 1
+    # Drop the rows that did not meet the condition
+    df.drop(rows_to_drop, inplace=True)
+    return df
 
 def create_auction_df(url_list):
     if not url_list:
@@ -212,7 +244,14 @@ def create_auction_df(url_list):
             df['url'] = pdf
 
             df = df[df['VEHICLE ID'].notnull() & (df['VEHICLE ID'] != 'VEHICLE ID')]
-            df_combined = pd.concat([df_combined, df], ignore_index=True)[df_combined.columns]
+            df = adjust_lot_numbers(df)  # Adjust lot numbers here
+            # Drop columns in df that are entirely empty or filled with NAs, if any, before concatenation
+            # This step assumes you want to retain the column structure of df_combined
+            columns_to_keep = df_combined.columns.intersection(df.columns)
+            df_filtered = df[columns_to_keep].dropna(how='all', axis=1)
+
+            # Concatenate while retaining the structure of df_combined
+            df_combined = pd.concat([df_combined, df_filtered], ignore_index=True).reindex(columns=df_combined.columns)
             load_urls.append([pdf, "loaded_url", now])
 
         except (HTTPError, IndexError, ValueError, Exception) as err:
@@ -262,7 +301,7 @@ def load_auction_db(df_list):
 if __name__ == '__main__':
     if False:
         df_list = create_auction_df(local_pdfs)
-        print(df_list)
+        load_auction_db(df_list)
         # Print the main dataframe (assuming it's the first in the list)
         logging.info("Manual run complete.")
     else:
