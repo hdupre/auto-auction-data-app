@@ -14,7 +14,7 @@ import numpy as np
 os.environ['DYLD_LIBRARY_PATH'] = '/Users/harris/Library/Java/JavaVirtualMachines/corretto-17.0.8/Contents/Home/lib'
 
 local_pdfs = [
-              "/Users/harris/Projects/auto_auction/auto-auction-data-apps/pdf/auction-041624-bronx.pdf"
+              "/Users/harris/Downloads/auction-050324-brooklyn.pdf"
               ]
 
 config = configparser.ConfigParser()
@@ -53,7 +53,7 @@ COLUMN_NAMES = ['#', 'YEAR', 'MAKE', 'PLATE#', 'ST', 'VEHICLE ID', 'LIENHOLDER']
 URL = "https://www.nyc.gov/site/finance/vehicles/auctions.page"
 START_STRING = "https://www.nyc.gov"
 # Define regex patterns
-VIN_PATTERN = r"^(?:(?=.*[A-HJ-NPR-Z])(?=.*\d)[A-HJ-NPR-Z\d]{11,17}|[A-HJ-NPR-Z\d]{8}[\dX][A-HJ-NPR-Z\d]{2}\d{6})$"
+VIN_PATTERN = r"[A-HJ-NPR-Z\d]{17}"
 DIGIT_PATTERN = r"(\b\d{1,2}\b)"
 YEAR_PATTERN = r"\b(19[6-9]\d|20[0-1]\d|202[0-9])\b"
 PLATE_PATTERN = r"(\b[a-zA-Z0-9]{6,8}\b)"
@@ -181,7 +181,7 @@ def process_pdf(pdf):
         # This check happens only if Tabula successfully reads the PDF.
         if df.columns.values.tolist() != COLUMN_NAMES:
             logging.error(pdf + " unexpected column headers, extracting manually...")
-            df = manual_extraction(full_path)  # Ensure you use `full_path` here as well if that's what `manual_extraction` expects.
+            df = manual_extraction(pdf)  # Ensure you use `full_path` here as well if that's what `manual_extraction` expects.
     return df
 
 def process_auction_date(pdf):
