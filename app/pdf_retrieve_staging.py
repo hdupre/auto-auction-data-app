@@ -5,7 +5,6 @@ import logging
 import pandas as pd
 import re
 from urllib.error import HTTPError
-from urllib.parse import quote_plus
 from sqlalchemy import create_engine
 from datetime import datetime
 import configparser
@@ -26,7 +25,7 @@ config.read(config_path)
 host = config.get('postgres', 'host')
 port = config.get('postgres', 'port')
 user = config.get('postgres', 'user')
-passwd = quote_plus(config.get('postgres', 'passwd'))
+passwd = config.get('postgres', 'passwd')
 auto_db = config.get('postgres', 'db')
 
 # Get the current date in the desired format
